@@ -1,0 +1,1 @@
+typealias ProgressReporter = (String) -> Unit

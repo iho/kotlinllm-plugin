@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Lightning bolt with AI/brain motif for Kotlin Inline Prompts -->
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7F52FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F97316;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Lightning bolt shape -->
+  <path d="M9 1 L4 9 L7 9 L5 15 L12 6 L9 6 Z" fill="url(#grad)" stroke="#000" stroke-width="0.5" opacity="0.9"/>
+  <!-- Small code brackets to represent inline prompts -->
+  <text x="1" y="5" font-family="monospace" font-size="4" fill="#7F52FF" font-weight="bold">&lt;</text>
+  <text x="13" y="13" font-family="monospace" font-size="4" fill="#F97316" font-weight="bold">&gt;</text>
+</svg>
