@@ -69,6 +69,68 @@ Run the plugin in a sandbox IDE:
 
 You can also run the Gradle `runIde` task from IntelliJ. Configure the target project's `.kotlinllm` file from `Tools > KotlinLLM Settings`; the plugin reads the API key from that file when it asks Koog/OpenAI for a generated implementation.
 
+## Building, Committing, and Pushing
+
+### Build the plugin locally
+
+From the repository root (`/home/ih/kotlinllm-plugin`):
+
+```bash
+# Compile the plugin (fast feedback on Kotlin errors)
+./gradlew compileKotlin --no-daemon
+
+# Run the full test suite (includes live Ollama integration tests that
+# self-skip when a local Ollama server is not running)
+./gradlew test
+
+# Package the distributable plugin zip
+./gradlew buildPlugin
+```
+
+The distributable zip is written to `build/distributions/kotlinllm-plugin-1.0-SNAPSHOT.zip`.
+Install it in IntelliJ IDEA 2025.2.x via `Settings > Plugins > gear icon > Install Plugin from Disk...`,
+then restart the IDE.
+
+### Commit and push
+
+The repository is a fork: `origin` points to `iho/kotlinllm-plugin` and `upstream` to
+`JetBrains-Research/kotlinllm-plugin`. Work happens on the `main` branch.
+
+```bash
+# 1. See what changed
+git status
+git diff --stat
+
+# 2. Review the diff for secrets before staging (never commit real API keys/tokens)
+git diff
+
+# 3. Stage the files you intend to commit (source + build files only; skip
+#    .vscode/, .gitignore, docs/, and binary/build artifacts)
+git add src/main/kotlin src/test/kotlin README.md build.gradle.kts
+
+# 4. Commit with a short, descriptive message (repo history uses terse messages)
+git commit -m "Add <short description of the change>"
+
+# 5. Push to your fork
+git push origin main
+```
+
+To open a pull request against upstream, push a feature branch instead:
+
+```bash
+git checkout -b my-feature
+git add <files>
+git commit -m "Add <description>"
+git push -u origin my-feature
+```
+
+Then open a PR from `iho/kotlinllm-plugin:my-feature` to `JetBrains-Research/kotlinllm-plugin:main`
+on GitHub.
+
+> **Commit hygiene:** only commit source and build files. Exclude `.vscode/`, `.gitignore`,
+> `docs/`, and binary/build artifacts (`*/bin/`, `kotlin-js-store/`, `*.class`, `*.jar`).
+> Before committing, confirm the diff contains no secrets (API keys, tokens, private keys).
+
 ## Target Project Setup
 
 The target Kotlin/JVM project must contain the stable Smart macro API file. This repository includes it as [templates/KotlinLLM.kt](templates/KotlinLLM.kt).

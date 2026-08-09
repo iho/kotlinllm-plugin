@@ -27,6 +27,8 @@ class SnapshotOrchestrator(
     private val project: Project,
     private val statusSink: (String) -> Unit = {},
     private val maxCoverageIterations: Int = 3,
+    /** Absolute path to the buggy production source file the BugFixer edits (null disables the BugFixer role). */
+    private val sourceFilePath: java.nio.file.Path? = null,
 ) {
     private companion object {
         val LOG: Logger = Logger.getInstance(SnapshotOrchestrator::class.java)
@@ -46,13 +48,21 @@ class SnapshotOrchestrator(
         llmClient: KoogLlmClient,
         targetProjectDir: Path?,
     ): Boolean {
-        val tools = SnapshotAgentTools(project, snapshot)
+        val tools = SnapshotAgentTools(project, snapshot, sourceFilePath)
 
         // --- Pass 1: materialize + author + review + test ---
         runRole(AgentRole.SNAPSHOTTER, snapshot, llmClient, tools, "Materialize the captured state.")
         runRole(AgentRole.SPEC_AUTHOR, snapshot, llmClient, tools, "Author the spec from the captured state.")
         runRole(AgentRole.SPEC_REVIEWER, snapshot, llmClient, tools, "Review the spec for gaps and edge cases.")
         runRole(AgentRole.TEST_GENERATOR, snapshot, llmClient, tools, "Generate @MutFlowTest tests for the spec.")
+
+        // --- BugFixer: repair the production source against the spec (if a source file is configured) ---
+        if (sourceFilePath != null) {
+            runRole(
+                AgentRole.BUG_FIXER, snapshot, llmClient, tools,
+                "Read the buggy source and the spec, then write the corrected source back."
+            )
+        }
 
         // --- Coverage loop (only if mutflow integration is enabled) ---
         var previousCoverage = -1.0

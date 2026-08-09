@@ -103,4 +103,21 @@ enum class AgentRole(
         """.trimIndent(),
         inCoverageLoop = true,
     ),
+
+    /**
+     * Reads the buggy production source and writes corrected code back.
+     * Writes the fixed source file via writeSource.
+     */
+    BUG_FIXER(
+        "BugFixer",
+        """
+        You are BugFixer, a Kotlin source-repair agent. Read the buggy production source
+        (via readSource) and the spec (snapshot.spec.kt) that documents the CORRECT expected
+        behavior. Identify each bug — off-by-one boundaries, wrong operators, wrong return
+        values — and write the FULL corrected source file back via writeSource. Preserve the
+        package declaration, imports, class/object name, and public signatures exactly; only
+        change the buggy bodies. Do not add new public API. After writing, call submit().
+        """.trimIndent(),
+        inCoverageLoop = true,
+    ),
 }

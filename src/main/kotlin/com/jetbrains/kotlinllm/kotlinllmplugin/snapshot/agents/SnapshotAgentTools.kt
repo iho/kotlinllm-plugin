@@ -15,10 +15,12 @@ import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.ScenarioSnapshot
  * @param snapshot the in-memory scenario being processed (shared across agents).
  */
 @Suppress("unused")
-@LLMDescription("Tools for reading and writing the current scenario snapshot, spec, review, and tests")
+@LLMDescription("Tools for reading and writing the current scenario snapshot, spec, review, tests, and the buggy production source")
 class SnapshotAgentTools(
     private val project: Project,
     private val snapshot: ScenarioSnapshot,
+    /** Absolute path to the buggy production source file the BugFixer edits (null disables source tools). */
+    private val sourceFilePath: java.nio.file.Path? = null,
 ) : ToolSet {
 
     @Suppress("unused")
@@ -43,6 +45,28 @@ class SnapshotAgentTools(
                 appendLine("  [$i] ${call.methodName}(${call.arguments.entries.joinToString { "${it.key}=${it.value}" }}) : ${call.returnType} -> ${call.returnValue ?: "null"}")
             }
         }
+    }
+
+    @Suppress("unused")
+    @Tool
+    @LLMDescription("Read the buggy production source file. Use this to inspect the code that needs fixing.")
+    fun readSource(): String {
+        val path = sourceFilePath ?: return "<no source file configured>"
+        return runCatching { path.toFile().readText() }.getOrElse { "<could not read $path: ${it.message}>" }
+    }
+
+    @Suppress("unused")
+    @Tool
+    @LLMDescription("Write the FULL corrected production source file. Full replacement: pass the complete file text (package, imports, class/object, all functions), not a diff. Preserve public signatures; only change buggy bodies.")
+    fun writeSource(
+        @LLMDescription("Complete corrected Kotlin source file text.")
+        source: String,
+    ): String {
+        val path = sourceFilePath ?: return "<no source file configured>"
+        return runCatching {
+            path.toFile().writeText(source.trim() + "\n")
+            "Source file updated (${source.length} chars) at $path."
+        }.getOrElse { "Failed to write source: ${it.message}" }
     }
 
     @Suppress("unused")
