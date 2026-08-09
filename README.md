@@ -155,6 +155,37 @@ Generated files include:
 
 These files are normal Kotlin source files. Once behavior has been generated, the target project can compile and run that behavior without another LLM request for the same scenario.
 
+## Snapshot Convention (Multi-Agent Spec Generation)
+
+KotlinLLM can run a multi-agent snapshot loop that derives behavior specs, reviews them,
+generates mutflow tests, and drives mutation coverage. It is launched from
+`Tools > Run Snapshot Orchestration`.
+
+Each scenario is materialized under the generated source root:
+
+```text
+<generatedFolder>/snapshots/<scenario-id>/
+    snapshot.json        # machine-readable captured state (state map + observed calls)
+    snapshot.spec.kt     # SpecAuthor: behavior spec / invariants
+    snapshot.review.kt   # SpecReviewer: gaps, counter-examples, feedback
+    snapshot.test.kt     # TestGenerator: @MutFlowTest + MutFlow.underTest { } tests
+    coverage.md          # MutationAuditor: mutflow killed/survived report
+```
+
+The loop runs five role agents (each a Koog `AIAgent` sharing the same provider/model):
+
+| Role | Writes | Purpose |
+|------|--------|---------|
+| `SpecAuthor` | `snapshot.spec.kt` | Derives behavior specs/invariants from the captured snapshot |
+| `SpecReviewer` | `snapshot.review.kt` | Audits the spec for gaps, missing branches, counter-examples |
+| `Snapshotter` | `snapshot.json` + review note | Validates/annotates the materialized state |
+| `TestGenerator` | `snapshot.test.kt` | Emits `@MutFlowTest` tests wrapping code in `MutFlow.underTest { }` |
+| `MutationAuditor` | `coverage.md` | Runs mutflow, reports killed/survived, recommends gap-closing tests |
+
+The orchestrator sequences these agents, invokes mutflow via Gradle on the target project,
+and loops back through SpecAuthor/TestGenerator while surviving mutants remain and coverage
+is still improving, stopping when all mutants are killed or coverage plateaus.
+
 ## Notes
 
 - KotlinLLM targets Kotlin/JVM because the runtime evolution loop depends on JVM class redefinition through JDI.

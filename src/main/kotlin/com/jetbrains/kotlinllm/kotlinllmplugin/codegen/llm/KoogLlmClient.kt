@@ -5,6 +5,7 @@ import ai.jetbrains.code.prompt.executor.clients.grazie.koog.createGraziePromptE
 import ai.jetbrains.code.prompt.executor.clients.grazie.koog.model.GrazieEnvironment
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.agents.core.tools.reflect.ToolSet
 import ai.koog.agents.core.tools.reflect.tools
 import ai.koog.agents.features.eventHandler.feature.handleEvents
 import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
@@ -45,6 +46,14 @@ class KoogLlmClient(
     private val statusSink: (String) -> Unit = {},
     private var llmProvider: KotlinLlmProvider? = null,
 ) : LlmClient {
+    /** Explicit Ollama base URL override (takes precedence over project config). */
+    var ollamaBaseUrl: String? = null
+
+    /** Explicit Ollama model id override (takes precedence over project config). */
+    var ollamaModel: String? = null
+
+    /** Explicit Anthropic model id override (takes precedence over project config). */
+    var anthropicModel: String? = null
     data class AsLlmCaseUpdate(
         val guardExpression: String,
         val caseHandlerBody: String,
@@ -84,7 +93,26 @@ class KoogLlmClient(
         return this
     }
 
+    fun selectOllama(baseUrl: String? = null, model: String? = null): KoogLlmClient {
+        llmProvider = KotlinLlmProvider.Ollama
+        if (baseUrl != null) ollamaBaseUrl = baseUrl
+        if (model != null) ollamaModel = model
+        return this
+    }
+
     override suspend fun chat(system: String, user: String): String {
+        val parserTools = KoogParserTools(this)
+        return chatWithTools(system, user, parserTools)
+    }
+
+    /**
+     * Run a Koog AI agent with the given [ToolSet] and the configured provider/model.
+     *
+     * Reused both by [chat] (parser tools) and by the snapshot role agents
+     * ([SnapshotAgentTools]), so every role agent shares the same provider/model
+     * resolution and LLM stats accounting.
+     */
+    suspend fun chatWithTools(system: String, user: String, toolSet: ToolSet): String {
         val startedNanos = System.nanoTime()
         val toolCalls = AtomicInteger(0)
         val stats = project?.kotlinLlmStatsService
@@ -93,10 +121,8 @@ class KoogLlmClient(
         val llmModel = llmModel(provider)
         inspectionToolCalls = 0
 
-        val parserTools = KoogParserTools(this)
-
         val toolRegistry = ToolRegistry {
-            tools(parserTools)
+            tools(toolSet)
         }
 
         val agent = AIAgent(
@@ -273,8 +299,9 @@ class KoogLlmClient(
                 authType = AuthType.User,
             )
             KotlinLlmProvider.Ollama -> {
-                val config = project?.let(::readKotlinLlmProjectConfig)
-                val baseUrl = config?.ollamaBaseUrl?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_BASE_URL
+                val baseUrl = ollamaBaseUrl
+                    ?: project?.let { readKotlinLlmProjectConfig(it).ollamaBaseUrl }
+                    ?: DEFAULT_OLLAMA_BASE_URL
                 SingleLLMPromptExecutor(OllamaClient(baseUrl = baseUrl))
             }
             KotlinLlmProvider.Anthropic -> SingleLLMPromptExecutor(AnthropicLLMClient(apiKey = apiToken))
@@ -286,13 +313,15 @@ class KoogLlmClient(
             KotlinLlmProvider.OpenAI -> OpenAIModels.Chat.GPT5
             KotlinLlmProvider.Grazie -> CLAUDE_SONNET
             KotlinLlmProvider.Ollama -> {
-                val config = project?.let(::readKotlinLlmProjectConfig)
-                val modelId = config?.ollamaModel?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_MODEL
+                val modelId = ollamaModel
+                    ?: project?.let { readKotlinLlmProjectConfig(it).ollamaModel }
+                    ?: DEFAULT_OLLAMA_MODEL
                 ollamaModelById(modelId)
             }
             KotlinLlmProvider.Anthropic -> {
-                val config = project?.let(::readKotlinLlmProjectConfig)
-                val modelId = config?.anthropicModel?.takeIf { it.isNotBlank() } ?: DEFAULT_ANTHROPIC_MODEL
+                val modelId = anthropicModel
+                    ?: project?.let { readKotlinLlmProjectConfig(it).anthropicModel }
+                    ?: DEFAULT_ANTHROPIC_MODEL
                 anthropicModelById(modelId)
             }
         }
