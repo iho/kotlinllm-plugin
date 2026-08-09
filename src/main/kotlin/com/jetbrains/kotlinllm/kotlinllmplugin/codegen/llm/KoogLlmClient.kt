@@ -7,21 +7,29 @@ import ai.koog.agents.core.agent.AIAgent
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.tools.reflect.tools
 import ai.koog.agents.features.eventHandler.feature.handleEvents
+import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
+import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
 import ai.koog.prompt.executor.clients.openai.OpenAILLMClient
 import ai.koog.prompt.executor.clients.openai.OpenAIModels
 import ai.koog.prompt.executor.llms.SingleLLMPromptExecutor
 import ai.koog.prompt.executor.model.PromptExecutor
+import ai.koog.prompt.executor.ollama.client.OllamaClient
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.llm.OllamaModels
 import com.intellij.openapi.project.Project
 import com.jetbrains.kotlinllm.kotlinllmplugin.models.ActualType
 import com.jetbrains.kotlinllm.kotlinllmplugin.models.ActualValue
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.DEFAULT_ANTHROPIC_MODEL
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.DEFAULT_OLLAMA_BASE_URL
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.DEFAULT_OLLAMA_MODEL
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.KotlinLlmProvider
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.elapsedMillis
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.kotlinLlmStatsService
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.readConfiguredKotlinLlmApiKey
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.readConfiguredKotlinLlmProvider
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.readKotlinLlmProjectConfig
 import java.util.concurrent.atomic.AtomicInteger
 
 internal const val AGENT_INSPECTION_TOOL_BUDGET = 12
@@ -243,9 +251,15 @@ class KoogLlmClient(
         if (provider == KotlinLlmProvider.Grazie) {
             System.getenv("GRAZIE_JWT_TOKEN")?.takeIf { it.isNotBlank() }?.let { return it }
         }
+        if (provider == KotlinLlmProvider.Ollama) {
+            // Ollama is a local server and does not require an API key.
+            return ""
+        }
         val credentialName = when (provider) {
             KotlinLlmProvider.OpenAI -> "OpenAI API key"
             KotlinLlmProvider.Grazie -> "Grazie JWT token"
+            KotlinLlmProvider.Ollama -> "Ollama API key"
+            KotlinLlmProvider.Anthropic -> "Anthropic API key"
         }
         error("KotlinLLM $credentialName is not set. Add apiKey to .kotlinllm from Tools > KotlinLLM Settings.")
     }
@@ -258,6 +272,12 @@ class KoogLlmClient(
                 grazieEnvironment = GrazieEnvironment.Staging,
                 authType = AuthType.User,
             )
+            KotlinLlmProvider.Ollama -> {
+                val config = project?.let(::readKotlinLlmProjectConfig)
+                val baseUrl = config?.ollamaBaseUrl?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_BASE_URL
+                SingleLLMPromptExecutor(OllamaClient(baseUrl = baseUrl))
+            }
+            KotlinLlmProvider.Anthropic -> SingleLLMPromptExecutor(AnthropicLLMClient(apiKey = apiToken))
         }
     }
 
@@ -265,7 +285,65 @@ class KoogLlmClient(
         return when (provider) {
             KotlinLlmProvider.OpenAI -> OpenAIModels.Chat.GPT5
             KotlinLlmProvider.Grazie -> CLAUDE_SONNET
+            KotlinLlmProvider.Ollama -> {
+                val config = project?.let(::readKotlinLlmProjectConfig)
+                val modelId = config?.ollamaModel?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_MODEL
+                ollamaModelById(modelId)
+            }
+            KotlinLlmProvider.Anthropic -> {
+                val config = project?.let(::readKotlinLlmProjectConfig)
+                val modelId = config?.anthropicModel?.takeIf { it.isNotBlank() } ?: DEFAULT_ANTHROPIC_MODEL
+                anthropicModelById(modelId)
+            }
         }
+    }
+
+    private fun ollamaModelById(modelId: String): LLModel {
+        val known = listOf(
+            OllamaModels.Meta.LLAMA_3_2_3B,
+            OllamaModels.Meta.LLAMA_3_2,
+            OllamaModels.Meta.LLAMA_4_SCOUT,
+            OllamaModels.Meta.LLAMA_4,
+            OllamaModels.Alibaba.QWEN_2_5_05B,
+            OllamaModels.Alibaba.QWEN_3_06B,
+            OllamaModels.Alibaba.QWQ_32B,
+            OllamaModels.Alibaba.QWEN_CODER_2_5_32B,
+            OllamaModels.Granite.GRANITE_3_2_VISION,
+        )
+        return known.firstOrNull { it.id == modelId }
+            ?: LLModel(
+                provider = LLMProvider.Ollama,
+                id = modelId,
+                capabilities = listOf(
+                    LLMCapability.Temperature,
+                    LLMCapability.Tools,
+                    LLMCapability.Schema.JSON.Basic,
+                ),
+                contextLength = 32_768,
+            )
+    }
+
+    private fun anthropicModelById(modelId: String): LLModel {
+        val known = listOf(
+            AnthropicModels.Sonnet_4,
+            AnthropicModels.Opus_4,
+            AnthropicModels.Sonnet_3_5,
+            AnthropicModels.Sonnet_3_7,
+            AnthropicModels.Haiku_3_5,
+        )
+        return known.firstOrNull { it.id == modelId }
+            ?: LLModel(
+                provider = LLMProvider.Anthropic,
+                id = modelId,
+                capabilities = listOf(
+                    LLMCapability.Temperature,
+                    LLMCapability.Tools,
+                    LLMCapability.ToolChoice,
+                    LLMCapability.Completion,
+                ),
+                contextLength = 200_000,
+                maxOutputTokens = 64_000,
+            )
     }
 
     private class SubmittedCaseEarlyExit : RuntimeException(SUBMITTED_CASE_RESPONSE)

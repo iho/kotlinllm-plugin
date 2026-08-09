@@ -43,7 +43,11 @@ Requirements:
 
 - IntelliJ IDEA 2025.2.x. The Gradle target is `intellijIdea("2025.2.4")`.
 - JDK 21.
-- An OpenAI API key saved in the target project's `.kotlinllm` file through `Tools > KotlinLLM Settings`.
+- A provider credential saved in the target project's `.kotlinllm` file through `Tools > KotlinLLM Settings`:
+  - **OpenAI**: an OpenAI API key.
+  - **Grazie**: a Grazie JWT token (or the `GRAZIE_JWT_TOKEN` environment variable).
+  - **Anthropic Claude**: an Anthropic API key.
+  - **Ollama (local)**: no key required; a running Ollama server (default `http://localhost:11434`).
 
 Build the plugin:
 

@@ -18,6 +18,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.jetbrains.kotlinllm.kotlinllmplugin.codegen.template.ensureGeneratedAsLlmProviderFile
 import com.jetbrains.kotlinllm.kotlinllmplugin.codegen.template.ensureGeneratedBootstrapFile
 import com.jetbrains.kotlinllm.kotlinllmplugin.codegen.template.ensureGeneratedMockLlmProviderFile
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.DEFAULT_ANTHROPIC_MODEL
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.DEFAULT_OLLAMA_BASE_URL
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.DEFAULT_OLLAMA_MODEL
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.KotlinLlmProjectConfig
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.KotlinLlmProvider
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.kotlinLlmCoroutineScope
@@ -138,6 +141,9 @@ private class KotlinLlmSettingsDialog(
     }
     private val apiKeyField = JPasswordField(initialConfig.apiKey)
     private val buildsFolderField = JTextField(displayProjectRelativePath(initialConfig.buildsFolder))
+    private val ollamaBaseUrlField = JTextField(initialConfig.ollamaBaseUrl)
+    private val ollamaModelField = JTextField(initialConfig.ollamaModel)
+    private val anthropicModelField = JTextField(initialConfig.anthropicModel)
     private val advancedPanel = JPanel(GridBagLayout()).apply {
         isVisible = false
     }
@@ -213,6 +219,30 @@ private class KotlinLlmSettingsDialog(
         constraints.gridx = 1
         constraints.gridwidth = 2
         panel.add(JLabel("Stored as plaintext in .kotlinllm. Grazie may also read GRAZIE_JWT_TOKEN."), constraints)
+
+        nextRow(constraints)
+        constraints.gridwidth = 1
+        addLabel(panel, constraints, "Ollama base URL:")
+        constraints.gridx = 1
+        constraints.weightx = 1.0
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        panel.add(ollamaBaseUrlField, constraints)
+
+        nextRow(constraints)
+        constraints.gridwidth = 1
+        addLabel(panel, constraints, "Ollama model:")
+        constraints.gridx = 1
+        constraints.weightx = 1.0
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        panel.add(ollamaModelField, constraints)
+
+        nextRow(constraints)
+        constraints.gridwidth = 1
+        addLabel(panel, constraints, "Anthropic model:")
+        constraints.gridx = 1
+        constraints.weightx = 1.0
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        panel.add(anthropicModelField, constraints)
 
         nextRow(constraints)
         constraints.gridwidth = 1
@@ -396,6 +426,9 @@ private class KotlinLlmSettingsDialog(
             apiKey = String(apiKeyField.password).trim(),
             llmProvider = llmProviderBox.selectedItem as? KotlinLlmProvider ?: KotlinLlmProvider.OpenAI,
             buildsFolder = buildsFolder,
+            ollamaBaseUrl = ollamaBaseUrlField.text.trim().ifBlank { DEFAULT_OLLAMA_BASE_URL },
+            ollamaModel = ollamaModelField.text.trim().ifBlank { DEFAULT_OLLAMA_MODEL },
+            anthropicModel = anthropicModelField.text.trim().ifBlank { DEFAULT_ANTHROPIC_MODEL },
         )
         saveKotlinLlmProjectConfig(project, config)
         folderField.text = generatedFolder

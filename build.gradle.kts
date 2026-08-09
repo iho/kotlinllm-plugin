@@ -46,13 +46,21 @@ dependencies {
     implementation("ai.koog:prompt-executor-openai-client:$koogVersion") {
         excludeCoroutines()
     }
+    implementation("ai.koog:prompt-executor-anthropic-client:$koogVersion") {
+        excludeCoroutines()
+    }
+    implementation("ai.koog:prompt-executor-ollama-client:$koogVersion") {
+        excludeCoroutines()
+    }
     implementation("ai.grazie.client:client-ktor-jvm:0.4.65") {
         excludeCoroutines()
     }
     implementation("ai.grazie.api:api-gateway-client-jvm:0.4.65") {
         excludeCoroutines()
     }
-    implementation("ai.jetbrains.code.prompt:code-prompt-executor-grazie-koog-jvm:1.0.0-beta.140")
+    implementation("ai.jetbrains.code.prompt:code-prompt-executor-grazie-koog-jvm:1.0.0-beta.140") {
+        excludeCoroutines()
+    }
 
 
     testImplementation("junit:junit:4.13.2")
