@@ -31,6 +31,7 @@ import com.jetbrains.kotlinllm.kotlinllmplugin.services.kotlinLlmStatsService
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.readConfiguredKotlinLlmApiKey
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.readConfiguredKotlinLlmProvider
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.readKotlinLlmProjectConfig
+import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.agents.AgentModelRef
 import java.util.concurrent.atomic.AtomicInteger
 
 internal const val AGENT_INSPECTION_TOOL_BUDGET = 12
@@ -112,13 +113,29 @@ class KoogLlmClient(
      * ([SnapshotAgentTools]), so every role agent shares the same provider/model
      * resolution and LLM stats accounting.
      */
-    suspend fun chatWithTools(system: String, user: String, toolSet: ToolSet): String {
+    suspend fun chatWithTools(system: String, user: String, toolSet: ToolSet): String =
+        chatWithTools(system, user, toolSet, modelOverride = null)
+
+    /**
+     * Run a Koog AI agent with the given [ToolSet], optionally overriding the
+     * provider/model for this specific call.
+     *
+     * @param modelOverride when non-null, this agent uses the given provider/model
+     *   instead of the project's default. This lets tool-heavy roles (e.g. BugFixer)
+     *   run on a cloud model while other roles use a cheap local model.
+     */
+    suspend fun chatWithTools(
+        system: String,
+        user: String,
+        toolSet: ToolSet,
+        modelOverride: AgentModelRef?,
+    ): String {
         val startedNanos = System.nanoTime()
         val toolCalls = AtomicInteger(0)
         val stats = project?.kotlinLlmStatsService
-        val provider = resolveLlmProvider()
-        val executor = createPromptExecutor(provider, resolveApiToken(provider))
-        val llmModel = llmModel(provider)
+        val provider = modelOverride?.provider ?: resolveLlmProvider()
+        val executor = createPromptExecutor(provider, resolveApiToken(provider), modelOverride)
+        val llmModel = llmModel(provider, modelOverride)
         inspectionToolCalls = 0
 
         val toolRegistry = ToolRegistry {
@@ -290,7 +307,11 @@ class KoogLlmClient(
         error("KotlinLLM $credentialName is not set. Add apiKey to .kotlinllm from Tools > KotlinLLM Settings.")
     }
 
-    private suspend fun createPromptExecutor(provider: KotlinLlmProvider, apiToken: String): PromptExecutor {
+    private suspend fun createPromptExecutor(
+        provider: KotlinLlmProvider,
+        apiToken: String,
+        modelOverride: AgentModelRef? = null,
+    ): PromptExecutor {
         return when (provider) {
             KotlinLlmProvider.OpenAI -> SingleLLMPromptExecutor(OpenAILLMClient(apiToken))
             KotlinLlmProvider.Grazie -> createGraziePromptExecutor(
@@ -299,7 +320,8 @@ class KoogLlmClient(
                 authType = AuthType.User,
             )
             KotlinLlmProvider.Ollama -> {
-                val baseUrl = ollamaBaseUrl
+                val baseUrl = modelOverride?.baseUrl
+                    ?: ollamaBaseUrl
                     ?: project?.let { readKotlinLlmProjectConfig(it).ollamaBaseUrl }
                     ?: DEFAULT_OLLAMA_BASE_URL
                 SingleLLMPromptExecutor(OllamaClient(baseUrl = baseUrl))
@@ -308,18 +330,20 @@ class KoogLlmClient(
         }
     }
 
-    private fun llmModel(provider: KotlinLlmProvider): LLModel {
+    private fun llmModel(provider: KotlinLlmProvider, modelOverride: AgentModelRef? = null): LLModel {
         return when (provider) {
             KotlinLlmProvider.OpenAI -> OpenAIModels.Chat.GPT5
             KotlinLlmProvider.Grazie -> CLAUDE_SONNET
             KotlinLlmProvider.Ollama -> {
-                val modelId = ollamaModel
+                val modelId = modelOverride?.modelId
+                    ?: ollamaModel
                     ?: project?.let { readKotlinLlmProjectConfig(it).ollamaModel }
                     ?: DEFAULT_OLLAMA_MODEL
                 ollamaModelById(modelId)
             }
             KotlinLlmProvider.Anthropic -> {
-                val modelId = anthropicModel
+                val modelId = modelOverride?.modelId
+                    ?: anthropicModel
                     ?: project?.let { readKotlinLlmProjectConfig(it).anthropicModel }
                     ?: DEFAULT_ANTHROPIC_MODEL
                 anthropicModelById(modelId)

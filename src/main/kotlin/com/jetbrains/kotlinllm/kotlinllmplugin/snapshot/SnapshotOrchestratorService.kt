@@ -6,6 +6,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.jetbrains.kotlinllm.kotlinllmplugin.codegen.llm.KoogLlmClient
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.kotlinLlmCoroutineScope
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.readKotlinLlmProjectConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -41,8 +42,14 @@ internal class SnapshotOrchestratorService : Disposable {
 
         activeJob = project.kotlinLlmCoroutineScope.launch {
             try {
+                val config = readKotlinLlmProjectConfig(project)
                 val llmClient = KoogLlmClient(project = project, statusSink = statusSink)
-                val orchestrator = SnapshotOrchestrator(project, statusSink)
+                val orchestrator = SnapshotOrchestrator(
+                    project,
+                    statusSink,
+                    agentModels = config.agentModels,
+                    customAgents = config.customAgents,
+                )
                 orchestrator.orchestrateScenario(scenario, llmClient, targetProjectDir)
             } finally {
                 activeJob = null

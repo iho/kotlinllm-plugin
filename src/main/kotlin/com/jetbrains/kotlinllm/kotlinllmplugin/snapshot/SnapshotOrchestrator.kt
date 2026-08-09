@@ -3,7 +3,11 @@ package com.jetbrains.kotlinllm.kotlinllmplugin.snapshot
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.jetbrains.kotlinllm.kotlinllmplugin.codegen.llm.KoogLlmClient
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.KotlinLlmProjectConfig
+import com.jetbrains.kotlinllm.kotlinllmplugin.services.readKotlinLlmProjectConfig
+import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.agents.AgentModelRef
 import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.agents.AgentRole
+import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.agents.CustomAgentSpec
 import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.agents.SnapshotAgentTools
 import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.mutflow.MutflowIntegration
 import java.nio.file.Path
@@ -29,6 +33,10 @@ class SnapshotOrchestrator(
     private val maxCoverageIterations: Int = 3,
     /** Absolute path to the buggy production source file the BugFixer edits (null disables the BugFixer role). */
     private val sourceFilePath: java.nio.file.Path? = null,
+    /** Per-role-agent model overrides, keyed by role display name (e.g. "BugFixer"). */
+    private val agentModels: Map<String, String> = emptyMap(),
+    /** User-defined custom agents to run after the built-in roles. */
+    private val customAgents: List<CustomAgentSpec> = emptyList(),
 ) {
     private companion object {
         val LOG: Logger = Logger.getInstance(SnapshotOrchestrator::class.java)
@@ -62,6 +70,11 @@ class SnapshotOrchestrator(
                 AgentRole.BUG_FIXER, snapshot, llmClient, tools,
                 "Read the buggy source and the spec, then write the corrected source back."
             )
+        }
+
+        // --- Custom agents (user-defined) run after the built-in roles ---
+        customAgents.forEach { agent ->
+            runCustomAgent(agent, snapshot, llmClient, tools)
         }
 
         // --- Coverage loop (only if mutflow integration is enabled) ---
@@ -146,14 +159,53 @@ class SnapshotOrchestrator(
             appendLine("Current scenario state:")
             appendLine(tools.readState())
         }
+        val modelOverride = agentModels[role.displayName]?.let { AgentModelRef.parse(it) }
+        if (modelOverride != null) {
+            statusSink("${role.displayName}: using model ${modelOverride.configKey}")
+        }
         // The chat() method wires the Koog AIAgent with the SnapshotAgentTools registry.
         runCatching {
-            llmClient.chatWithTools(system, user, tools)
+            llmClient.chatWithTools(system, user, tools, modelOverride)
         }.onSuccess {
             statusSink("${role.displayName}: done.")
         }.onFailure { e ->
             statusSink("${role.displayName}: failed (${e.message}). Continuing with what was written.")
             LOG.warn("${role.displayName} failed", e)
+        }
+    }
+
+    private suspend fun runCustomAgent(
+        agent: CustomAgentSpec,
+        snapshot: ScenarioSnapshot,
+        llmClient: KoogLlmClient,
+        tools: SnapshotAgentTools,
+    ) {
+        statusSink("${agent.name}: starting...")
+        val system = buildString {
+            appendLine(agent.persona)
+            appendLine()
+            appendLine(
+                "Scenario id: ${snapshot.state.scenarioId}. " +
+                    "Use the provided tools to read the snapshot/spec/review and write your artifact. " +
+                    "Call submit() when finished."
+            )
+        }
+        val user = buildString {
+            appendLine("Perform your role for this scenario.")
+            appendLine()
+            appendLine("Current scenario state:")
+            appendLine(tools.readState())
+        }
+        if (agent.model != null) {
+            statusSink("${agent.name}: using model ${agent.model.configKey}")
+        }
+        runCatching {
+            llmClient.chatWithTools(system, user, tools, agent.model)
+        }.onSuccess {
+            statusSink("${agent.name}: done.")
+        }.onFailure { e ->
+            statusSink("${agent.name}: failed (${e.message}). Continuing with what was written.")
+            LOG.warn("${agent.name} failed", e)
         }
     }
 
