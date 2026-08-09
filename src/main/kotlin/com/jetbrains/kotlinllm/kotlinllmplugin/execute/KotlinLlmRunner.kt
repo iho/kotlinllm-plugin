@@ -194,11 +194,16 @@ class KotlinLlmRunner : DefaultJavaProgramRunner() {
 
                     override fun processWillTerminate(event: ProcessEvent, willBeDestroyed: Boolean) {
                         statsStatus = "stopped"
+                        // Reset the run-in-progress flag immediately so a subsequent run is not
+                        // blocked even if the coroutine's finally block is delayed or skipped
+                        // (e.g. the JDI event loop is stuck in a non-cancellable call).
+                        project.kotlinLlmRunInProgress.set(false)
                         runJob?.cancel(CancellationException("KotlinLLM run stopped by user"))
                     }
 
                     override fun processTerminated(event: ProcessEvent) {
                         statsStatus = "stopped"
+                        project.kotlinLlmRunInProgress.set(false)
                         runJob?.cancel(CancellationException("KotlinLLM run terminated"))
                     }
                 })

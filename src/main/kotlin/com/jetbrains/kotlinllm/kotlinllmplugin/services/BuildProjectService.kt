@@ -234,7 +234,10 @@ class BuildProjectService(private val project: Project) {
         val projectBasePath = project.basePath ?: return null
         val rawPath = Path.of(path)
         val fullPath = if (rawPath.isAbsolute) rawPath else Path.of(projectBasePath, path)
-        return LocalFileSystem.getInstance().findFileByNioFile(fullPath)
+        // Refresh the VFS so a newly-written generated file is indexed before lookup.
+        // Without this, findFileByNioFile can miss a just-created file and the build
+        // falls back to a full project build, which hangs on plain (non-Gradle) modules.
+        return LocalFileSystem.getInstance().refreshAndFindFileByNioFile(fullPath)
     }
 
     private fun toProjectRelativePath(path: String): String {
