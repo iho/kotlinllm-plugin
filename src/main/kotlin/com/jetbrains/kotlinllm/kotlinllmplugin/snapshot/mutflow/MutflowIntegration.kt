@@ -108,6 +108,46 @@ object MutflowIntegration {
         return parseReport(output)
     }
 
+    /**
+     * Compile ONLY the test source set (no mutation run) and return whether it
+     * succeeded plus the compiler output. This is the compile-check gate: the
+     * orchestrator verifies the agent-written tests compile BEFORE running mutflow,
+     * and feeds any compile errors back to the TestGenerator agent to retry.
+     *
+     * @return a [CompileResult] with the raw gradle output and a success flag.
+     */
+    fun compileTest(config: MutflowRunConfig): CompileResult {
+        val gradlew = config.targetProjectDir.resolve("gradlew")
+        if (!gradlew.exists()) {
+            return CompileResult(
+                succeeded = false,
+                output = "No gradlew found at ${gradlew}",
+            )
+        }
+        val command = listOf(gradlew.toString(), "compileTestKotlin", "--console=plain")
+        val output = try {
+            runProcess(command, config.targetProjectDir, config.timeoutMs)
+        } catch (e: Exception) {
+            return CompileResult(succeeded = false, output = "Gradle compile failed: ${e.message}")
+        }
+        val succeeded = output.contains("BUILD SUCCESSFUL") && !output.contains("BUILD FAILED")
+        return CompileResult(succeeded = succeeded, output = output)
+    }
+
+    /** Result of a test-source compile check. */
+    data class CompileResult(
+        val succeeded: Boolean,
+        val output: String,
+    ) {
+        /** Extract the compiler error lines (e: ...) for feeding back to the agent. */
+        val errorLines: String
+            get() = output.lineSequence()
+                .filter { it.trim().startsWith("e:") }
+                .take(40)
+                .joinToString("\n")
+                .ifBlank { output.take(2000) }
+    }
+
     private fun runProcess(command: List<String>, workDir: Path, timeoutMs: Long): String {
         val pb = ProcessBuilder(command)
             .directory(workDir.toFile())

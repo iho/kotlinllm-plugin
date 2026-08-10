@@ -159,4 +159,23 @@ class MutflowParserTest {
         assertEquals(0, report.total)
         assertEquals("empty run must not report 100% coverage", 0.0, report.coverage, 0.0001)
     }
+
+    @Test
+    fun `compile result extracts error lines for agent feedback`() {
+        val output = """
+            e: file:///x/project_ollama_test.kt:43:53 Null cannot be a value of a non-null type 'String'.
+            e: file:///x/project_ollama_test.kt:12:9 Class 'TestGreeter' is not abstract
+            BUILD FAILED
+        """.trimIndent()
+        val result = MutflowIntegration.CompileResult(succeeded = false, output = output)
+        assertTrue("should extract e: lines", result.errorLines.contains("Null cannot be a value"))
+        assertTrue("should include the class error", result.errorLines.contains("TestGreeter"))
+        assertTrue("should not include BUILD FAILED", !result.errorLines.contains("BUILD FAILED"))
+    }
+
+    @Test
+    fun `compile result with no error lines falls back to output`() {
+        val result = MutflowIntegration.CompileResult(succeeded = false, output = "No gradlew found")
+        assertTrue("should fall back to raw output", result.errorLines.contains("No gradlew found"))
+    }
 }

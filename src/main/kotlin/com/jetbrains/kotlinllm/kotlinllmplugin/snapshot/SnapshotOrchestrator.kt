@@ -31,6 +31,8 @@ class SnapshotOrchestrator(
     private val project: Project,
     private val statusSink: (String) -> Unit = {},
     private val maxCoverageIterations: Int = 3,
+    /** How many times to retry the TestGenerator agent when the emitted tests fail to compile. */
+    private val maxCompileRetries: Int = 3,
     /** Absolute path to the buggy production source file the BugFixer edits (null disables the BugFixer role). */
     private val sourceFilePath: java.nio.file.Path? = null,
     /** Per-role-agent model overrides, keyed by role display name (e.g. "BugFixer"). */
@@ -98,6 +100,40 @@ class SnapshotOrchestrator(
             )
             statusSink(if (emittedPath != null) "Emitted agent tests to $emittedPath." else "Failed to emit agent tests.")
 
+            // --- Compile-check gate: verify the agent-written tests compile BEFORE
+            // running mutflow. If they don't, feed the compiler errors back to the
+            // TestGenerator agent and retry (bounded), so a non-compiling test file
+            // (e.g. null passed to a non-null param, missing override) is fixed
+            // instead of silently failing the mutflow run.
+            val config = MutflowIntegration.MutflowRunConfig(
+                project = project,
+                targetProjectDir = targetProjectDir,
+                testPackage = testPackageFor(snapshot),
+            )
+            var compileOk = false
+            for (compileAttempt in 1..maxCompileRetries) {
+                val compile = MutflowIntegration.compileTest(config)
+                if (compile.succeeded) {
+                    compileOk = true
+                    statusSink("Agent tests compile (attempt $compileAttempt).")
+                    break
+                }
+                if (compileAttempt >= maxCompileRetries) {
+                    statusSink("Agent tests still fail to compile after $maxCompileRetries attempts; giving up on compile gate.")
+                    break
+                }
+                statusSink("Agent tests FAIL to compile (attempt $compileAttempt). Feeding errors back to TestGenerator...")
+                runRole(
+                    AgentRole.TEST_GENERATOR, snapshot, llmClient, tools,
+                    "The generated tests do not compile. Compiler errors:\n${compile.errorLines}\n\n" +
+                        "Fix the test source so it compiles (correct imports, implement all interface members, " +
+                        "never pass null to non-null params, use valid kotlin.test assertions). Write the corrected full file via writeTests."
+                )
+                MutflowIntegration.emitTestFile(config, snapshot.state.scenarioId, snapshot.tests)
+            }
+            if (!compileOk) {
+                statusSink("Skipping mutflow because the agent tests do not compile.")
+            } else {
             for (iteration in 1..maxCoverageIterations) {
                 statusSink("Running mutflow (iteration $iteration/$maxCoverageIterations)...")
                 val report = MutflowIntegration.runMutflow(
@@ -175,6 +211,7 @@ class SnapshotOrchestrator(
                     "Regenerate tests to kill the surviving mutants."
                 )
             }
+            } // end else (compileOk)
         }
 
         // --- Persist the final materialized snapshot ---
