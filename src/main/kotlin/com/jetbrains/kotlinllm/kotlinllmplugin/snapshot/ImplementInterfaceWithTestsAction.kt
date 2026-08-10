@@ -1,5 +1,8 @@
 package com.jetbrains.kotlinllm.kotlinllmplugin.snapshot
 
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationType
+import com.intellij.notification.Notifications
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -26,8 +29,8 @@ import java.time.Instant
  *   4. Runs the snapshot orchestration (TestGenerator + mutflow) against it, so the
  *      agent writes genuinely useful @MutFlowTest tests and mutflow drives coverage.
  *
- * This closes the gap between "define an interface" and "get a real implementation
- * plus useful mutation tests" in one step.
+ * All progress and errors are surfaced as visible IDE notifications so the action
+ * never looks like it "did nothing."
  */
 class ImplementInterfaceWithTestsAction : AnAction() {
 
@@ -36,9 +39,11 @@ class ImplementInterfaceWithTestsAction : AnAction() {
     override fun update(event: AnActionEvent) {
         val project = event.project
         val file = event.getData(CommonDataKeys.VIRTUAL_FILE)
+        // Always enable when there's a project + a .kt file, so the action is never
+        // silently greyed out. The running-state check happens in actionPerformed with
+        // a visible warning, so the user always gets feedback.
         event.presentation.isEnabled =
-            project != null && file != null && file.extension == "kt" &&
-                !project.snapshotOrchestratorService.isRunning()
+            project != null && file != null && file.extension == "kt"
         event.presentation.isVisible = project != null
     }
 
@@ -78,12 +83,17 @@ class ImplementInterfaceWithTestsAction : AnAction() {
 
         val statusSink: (String) -> Unit = { message ->
             ApplicationManager.getApplication().invokeLater({
-                if (!project.isDisposed) println("KotlinLLM Implement: $message")
+                if (!project.isDisposed) {
+                    notify(project, message, NotificationType.INFORMATION)
+                }
             }, ModalityState.any())
         }
 
         val targetProjectDir = project.basePath?.let { Path.of(it) }
         val interfaceFile = file
+
+        // Visible start feedback so the user knows the action is running.
+        notify(project, "Implementing interface ${interfaceFile.name}...", NotificationType.INFORMATION)
 
         project.kotlinLlmCoroutineScope.launch {
             try {
@@ -110,9 +120,11 @@ class ImplementInterfaceWithTestsAction : AnAction() {
                 val implFile = writeImplementation(interfaceFile, implSource)
                 if (implFile == null) {
                     statusSink("Failed to write implementation file.")
+                    notify(project, "Failed to write implementation file.", NotificationType.ERROR)
                     return@launch
                 }
                 statusSink("Wrote implementation to ${implFile.path}")
+                notify(project, "Wrote implementation to ${implFile.path}", NotificationType.INFORMATION)
 
                 // 3. Build a snapshot seeded with the interface as the target, then run
                 //    the orchestration (TestGenerator + mutflow) against it.
@@ -133,8 +145,16 @@ class ImplementInterfaceWithTestsAction : AnAction() {
                 )
             } catch (e: Exception) {
                 statusSink("Implement-interface flow failed: ${e.message}")
+                notify(project, "Implement-interface flow failed: ${e.message}", NotificationType.ERROR)
             }
         }
+    }
+
+    private fun notify(project: Project, message: String, type: NotificationType) {
+        Notifications.Bus.notify(
+            Notification("KotlinLLM", "KotlinLLM Implement Interface", message, type),
+            project,
+        )
     }
 
     private fun stripCodeFences(text: String): String = stripCodeFencesForTest(text)
