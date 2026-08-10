@@ -35,6 +35,8 @@ object SnapshotIo {
         writeTextFile(dir, SnapshotFiles.REVIEW, snapshot.review)
         writeTextFile(dir, SnapshotFiles.TESTS, snapshot.tests)
         writeTextFile(dir, SnapshotFiles.COVERAGE, snapshot.coverage)
+        writeTextFile(dir, SnapshotFiles.PROMPT_SPEC, snapshot.promptSpec)
+        writeTextFile(dir, SnapshotFiles.HIGH_LEVEL_SPEC, snapshot.highLevelSpec)
         snapshot.dirty = false
         refreshVfs(project, dir)
     }
@@ -50,6 +52,8 @@ object SnapshotIo {
             review = readTextFile(dir, SnapshotFiles.REVIEW).orEmpty(),
             tests = readTextFile(dir, SnapshotFiles.TESTS).orEmpty(),
             coverage = readTextFile(dir, SnapshotFiles.COVERAGE).orEmpty(),
+            promptSpec = readTextFile(dir, SnapshotFiles.PROMPT_SPEC).orEmpty(),
+            highLevelSpec = readTextFile(dir, SnapshotFiles.HIGH_LEVEL_SPEC).orEmpty(),
             dirty = false,
         )
     }

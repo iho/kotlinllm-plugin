@@ -62,7 +62,9 @@ class SnapshotOrchestrator(
         runRole(AgentRole.SNAPSHOTTER, snapshot, llmClient, tools, "Materialize the captured state.")
         runRole(AgentRole.SPEC_AUTHOR, snapshot, llmClient, tools, "Author the spec from the captured state.")
         runRole(AgentRole.SPEC_REVIEWER, snapshot, llmClient, tools, "Review the spec for gaps and edge cases.")
+        runRole(AgentRole.SPEC_WRITER, snapshot, llmClient, tools, "Write the prompt-specification describing the functionality, ready to be inlined in code.")
         runRole(AgentRole.TEST_GENERATOR, snapshot, llmClient, tools, "Generate @MutFlowTest tests for the spec.")
+        runRole(AgentRole.COVERAGE_WATCHDOG, snapshot, llmClient, tools, "Audit the generated code, spec, prompt-spec, and tests; write the high-level specification.")
 
         // --- BugFixer: repair the production source against the spec (if a source file is configured) ---
         if (sourceFilePath != null) {
@@ -80,7 +82,22 @@ class SnapshotOrchestrator(
         // --- Coverage loop (only if mutflow integration is enabled) ---
         var previousCoverage = -1.0
         var fullCoverage = false
-        if (targetProjectDir != null && snapshot.tests.isNotBlank()) {
+        if (targetProjectDir != null) {
+            // Re-emit the agent-written @MutFlowTest file into the target project's test
+            // source set. This both (a) puts fresh agent tests on disk and (b) RECREATES
+            // test files the developer removed, so mutflow always runs against the agent's
+            // generated suite rather than silently skipping when tests are missing.
+            val emittedPath = MutflowIntegration.emitTestFile(
+                MutflowIntegration.MutflowRunConfig(
+                    project = project,
+                    targetProjectDir = targetProjectDir,
+                    testPackage = testPackageFor(snapshot),
+                ),
+                snapshot.state.scenarioId,
+                snapshot.tests,
+            )
+            statusSink(if (emittedPath != null) "Emitted agent tests to $emittedPath." else "Failed to emit agent tests.")
+
             for (iteration in 1..maxCoverageIterations) {
                 statusSink("Running mutflow (iteration $iteration/$maxCoverageIterations)...")
                 val report = MutflowIntegration.runMutflow(
@@ -96,7 +113,37 @@ class SnapshotOrchestrator(
                         if (report.survived > 0) " (${report.survived} survived)" else ""
                 )
 
-                if (!report.succeeded || report.total == 0) break
+                // Genuine build/run failure (mutflow couldn't run at all): stop.
+                if (!report.succeeded) break
+
+                if (report.total == 0) {
+                    // No mutations were measured — the emitted tests are missing, blank, or
+                    // don't exercise any @MutationTarget code. Regenerate them via the
+                    // TestGenerator agent and retry instead of breaking (this is what recreates
+                    // tests a developer removed). Skip on the last iteration to avoid an
+                    // infinite regen loop.
+                    if (iteration >= maxCoverageIterations) {
+                        statusSink("No mutations measured and regeneration budget exhausted; stopping.")
+                        break
+                    }
+                    statusSink("No mutations measured — regenerating tests via TestGenerator.")
+                    runRole(
+                        AgentRole.TEST_GENERATOR, snapshot, llmClient, tools,
+                        "No mutations were measured — the tests are missing or don't exercise @MutationTarget code. Write new @MutFlowTest tests that cover the @MutationTarget class so mutations are discovered."
+                    )
+                    MutflowIntegration.emitTestFile(
+                        MutflowIntegration.MutflowRunConfig(
+                            project = project,
+                            targetProjectDir = targetProjectDir,
+                            testPackage = testPackageFor(snapshot),
+                        ),
+                        snapshot.state.scenarioId,
+                        snapshot.tests,
+                    )
+                    previousCoverage = 0.0
+                    continue
+                }
+
                 if (report.survived == 0) {
                     fullCoverage = true
                     runRole(
@@ -227,7 +274,11 @@ class SnapshotOrchestrator(
         appendLine("Survived: ${report.survived}")
         appendLine("Coverage: ${(report.coverage * 100).toInt()}%")
         appendLine()
-        if (report.survivedMutants.isNotEmpty()) {
+        if (report.total == 0) {
+            // No mutations were measured (e.g. empty/missing agent tests, or no
+            // @MutationTarget code exercised). This is NOT a green run.
+            appendLine("**No mutations measured** — the agent tests did not exercise any @MutationTarget code. This is not full coverage.")
+        } else if (report.survivedMutants.isNotEmpty()) {
             appendLine("## Surviving mutants (coverage gaps)")
             appendLine()
             report.survivedMutants.forEach { m ->

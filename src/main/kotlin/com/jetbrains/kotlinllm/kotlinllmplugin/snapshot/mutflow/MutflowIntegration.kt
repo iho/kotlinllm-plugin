@@ -56,7 +56,9 @@ object MutflowIntegration {
         val succeeded: Boolean,
     ) {
         val survivedMutants: List<Mutant> get() = mutants.filter { it.status == "SURVIVED" }
-        val coverage: Double get() = if (total == 0) 1.0 else killed.toDouble() / total
+        /** Coverage ratio (0.0–1.0). Returns 0.0 when no mutations were measured, so an
+         *  empty run is NOT reported as 100% coverage (a false green). */
+        val coverage: Double get() = if (total == 0) 0.0 else killed.toDouble() / total
     }
 
     /**

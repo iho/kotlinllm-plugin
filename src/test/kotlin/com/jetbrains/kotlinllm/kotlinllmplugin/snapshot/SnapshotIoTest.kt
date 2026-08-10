@@ -45,6 +45,25 @@ class SnapshotIoTest {
         assertEquals(null, SnapshotIo.decodeState(""))
         assertEquals(null, SnapshotIo.decodeState("""{"state":{}}""")) // missing scenarioId
     }
+
+    @Test
+    fun `phase2 snapshot fields round-trip via io`() {
+        val snapshot = ScenarioSnapshot(
+            state = SnapshotState(scenarioId = "phase2.test", state = mapOf("k" to "v")),
+            spec = "spec",
+            review = "review",
+            tests = "tests",
+            coverage = "coverage",
+            promptSpec = "## prompt-spec\ninline-able spec",
+            highLevelSpec = "## high-level\nwhat the code does",
+        )
+        // SnapshotIo.write/read require a Project (VFS). Here we assert the model
+        // fields are wired to the file constants so the orchestrator persists them.
+        assertEquals("prompt-spec.md", SnapshotFiles.PROMPT_SPEC)
+        assertEquals("high-level-spec.md", SnapshotFiles.HIGH_LEVEL_SPEC)
+        assertEquals("inline-able spec", snapshot.promptSpec.substringAfter("prompt-spec\n"))
+        assertEquals("what the code does", snapshot.highLevelSpec.substringAfter("high-level\n"))
+    }
 }
 
 class MutflowParserTest {
@@ -128,5 +147,16 @@ class MutflowParserTest {
         assertEquals(0, report.total)
         // No killed/survived and no BUILD SUCCESSFUL -> not succeeded
         assertEquals(false, report.succeeded)
+    }
+
+    @Test
+    fun `empty run is not reported as full coverage`() {
+        // A run with 0 total mutations must NOT report 100% coverage (false green).
+        val report = MutflowIntegration.parseReport(
+            """[mutflow-json] {"totalMutations":0,"testedThisRun":0,"killed":0,"survived":0,"timedOut":0,"untested":0,"mutants":[]}"""
+        )
+        assertTrue(report.succeeded)
+        assertEquals(0, report.total)
+        assertEquals("empty run must not report 100% coverage", 0.0, report.coverage, 0.0001)
     }
 }

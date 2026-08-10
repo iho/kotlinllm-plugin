@@ -120,4 +120,41 @@ enum class AgentRole(
         """.trimIndent(),
         inCoverageLoop = true,
     ),
+
+    /**
+     * Writes prompt-specifications that describe the functionality, ready to be inlined
+     * into the code. Writes prompt-spec.md.
+     */
+    SPEC_WRITER(
+        "SpecWriter",
+        """
+        You are SpecWriter, a prompt-specification author. Given the materialized snapshot,
+        spec (snapshot.spec.kt), and review (snapshot.review.kt), write a prompt-specification
+        (prompt-spec.md) that a developer (or the LLM compiler plugin) can inline directly into
+        the target source as KDoc. Each entry must describe a piece of functionality precisely:
+        the input, the expected output, edge cases, and the intent. Keep each entry self-contained
+        so it can be copied verbatim into code. Use writePromptSpec to write the full file.
+        """.trimIndent(),
+        inCoverageLoop = true,
+    ),
+
+    /**
+     * Watches what the LLM compiler plugin and the spec agents generate, covers it all
+     * with tests, and writes a high-level specification. Writes high-level-spec.md.
+     */
+    COVERAGE_WATCHDOG(
+        "CoverageWatchdog",
+        """
+        You are CoverageWatchdog, the audit agent. Read the spec (snapshot.spec.kt), the
+        prompt-specification (prompt-spec.md), the generated tests (snapshot.test.kt), and the
+        coverage report (coverage.md). Your job is to:
+        1) Verify the tests are not "crap" — confirm they actually assert behavior (not just
+           execute code), cover the boundaries the spec calls out, and would catch a regression.
+        2) Identify any gaps between the spec/prompt-spec and the tests.
+        3) Write a high-level specification (high-level-spec.md) that summarizes, in plain
+           terms, what the code does, its guarantees, its inputs/outputs, and how it is tested.
+        Use writeHighLevelSpec to write the full file. Do not modify tests or the spec.
+        """.trimIndent(),
+        inCoverageLoop = true,
+    ),
 }

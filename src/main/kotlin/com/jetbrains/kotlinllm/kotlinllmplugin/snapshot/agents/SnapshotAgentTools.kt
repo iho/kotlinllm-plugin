@@ -91,6 +91,16 @@ class SnapshotAgentTools(
 
     @Suppress("unused")
     @Tool
+    @LLMDescription("Read the current prompt-specification (prompt-spec.md). Empty if SpecWriter has not written it yet.")
+    fun readPromptSpec(): String = snapshot.promptSpec.ifBlank { "<no prompt-spec written yet>" }
+
+    @Suppress("unused")
+    @Tool
+    @LLMDescription("Read the current high-level specification (high-level-spec.md). Empty if CoverageWatchdog has not written it yet.")
+    fun readHighLevelSpec(): String = snapshot.highLevelSpec.ifBlank { "<no high-level spec written yet>" }
+
+    @Suppress("unused")
+    @Tool
     @LLMDescription("Write the behavior spec (snapshot.spec.kt). Full replacement: pass the complete spec text, not a diff. Must be valid Kotlin containing invariants, pre/post-conditions, or representative input-output mappings derived from the captured state.")
     fun writeSpec(
         @LLMDescription("Complete Kotlin spec text.")
@@ -123,6 +133,30 @@ class SnapshotAgentTools(
         snapshot.tests = tests.trim()
         snapshot.dirty = true
         return "Tests updated (${snapshot.tests.length} chars)."
+    }
+
+    @Suppress("unused")
+    @Tool
+    @LLMDescription("Write the prompt-specification (prompt-spec.md). Full replacement: self-contained entries describing functionality (input, expected output, edge cases, intent) ready to be inlined into code as KDoc.")
+    fun writePromptSpec(
+        @LLMDescription("Complete prompt-specification markdown text.")
+        promptSpec: String,
+    ): String {
+        snapshot.promptSpec = promptSpec.trim()
+        snapshot.dirty = true
+        return "Prompt-spec updated (${snapshot.promptSpec.length} chars)."
+    }
+
+    @Suppress("unused")
+    @Tool
+    @LLMDescription("Write the high-level specification (high-level-spec.md). Full replacement: a plain-language summary of what the code does, its guarantees, inputs/outputs, and how it is tested.")
+    fun writeHighLevelSpec(
+        @LLMDescription("Complete high-level specification markdown text.")
+        highLevelSpec: String,
+    ): String {
+        snapshot.highLevelSpec = highLevelSpec.trim()
+        snapshot.dirty = true
+        return "High-level spec updated (${snapshot.highLevelSpec.length} chars)."
     }
 
     @Suppress("unused")

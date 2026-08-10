@@ -132,6 +132,7 @@ class KoogLlmClient(
     ): String {
         val startedNanos = System.nanoTime()
         val toolCalls = AtomicInteger(0)
+        val llmRoundTrips = AtomicInteger(0)
         val stats = project?.kotlinLlmStatsService
         val provider = modelOverride?.provider ?: resolveLlmProvider()
         val executor = createPromptExecutor(provider, resolveApiToken(provider), modelOverride)
@@ -151,6 +152,9 @@ class KoogLlmClient(
         ) {
             handleEvents {
                 onBeforeLLMCall {
+                    val n = llmRoundTrips.incrementAndGet()
+                    // Visible heartbeat so long generation rounds don't look "stuck".
+                    reportStatus("LLM round-trip $n...")
                     if (submittedCase != null) {
                         reportStatus("Submitting succeeded.")
                         throw SubmittedCaseEarlyExit()

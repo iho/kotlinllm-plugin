@@ -59,13 +59,16 @@ class RunSnapshotOrchestrationAction : AnAction() {
         }
 
         val scenarioId = buildScenarioId(project)
-        val snapshot = ScenarioSnapshot(
+        // Load the previously-materialized snapshot if one exists (preserves the agent's
+        // prior spec/review/tests so a re-run recreates removed test files instead of
+        // starting from blank). Otherwise seed a fresh empty snapshot.
+        val snapshot = SnapshotIo.read(project, scenarioId) ?: ScenarioSnapshot(
             state = SnapshotState(
                 scenarioId = scenarioId,
                 capturedAt = Instant.now().toString(),
             )
         )
-        // Materialize the empty state file immediately so the convention is visible.
+        // Materialize the state file immediately so the convention is visible.
         SnapshotIo.write(project, snapshot)
 
         val targetProjectDir = project.basePath?.let { Path.of(it) }

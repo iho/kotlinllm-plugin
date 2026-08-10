@@ -25,6 +25,8 @@ object SnapshotFiles {
     const val REVIEW = "snapshot.review.kt"
     const val TESTS = "snapshot.test.kt"
     const val COVERAGE = "coverage.md"
+    const val PROMPT_SPEC = "prompt-spec.md"
+    const val HIGH_LEVEL_SPEC = "high-level-spec.md"
 }
 
 /** Root folder (relative to the generated source root) where scenarios live. */
@@ -42,6 +44,10 @@ data class ScenarioSnapshot(
     var tests: String = "",
     /** MutationAuditor output: coverage report (markdown). */
     var coverage: String = "",
+    /** SpecWriter output: prompt-specifications describing the functionality, ready to be inlined in code. */
+    var promptSpec: String = "",
+    /** CoverageWatchdog output: high-level specification covering everything generated. */
+    var highLevelSpec: String = "",
     /** Whether the current state has changed since the last materialization. */
     var dirty: Boolean = true,
 )
