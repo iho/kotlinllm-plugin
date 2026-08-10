@@ -459,6 +459,21 @@ class KotlinLlmLoop(
 
     private fun logBuildProgress(message: String) {
         LOG.info("KotlinLLM build: $message")
+        // Surface build/reload progress to the visible console so a hang at any step
+        // (VFS refresh, compile, class collection, vm.suspend, redefineClasses,
+        // breakpoint refresh) is diagnosable instead of looking frozen at "Compiling...".
+        runCatching {
+            if (!project.isDisposed) {
+                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater({
+                    if (!project.isDisposed) {
+                        consoleView.print(
+                            "KotlinLLM: $message\n",
+                            ConsoleViewContentType.SYSTEM_OUTPUT
+                        )
+                    }
+                }, com.intellij.openapi.application.ModalityState.any())
+            }
+        }
     }
 
     private suspend fun flushPendingPsiWrites() {
