@@ -178,4 +178,28 @@ class MutflowParserTest {
         val result = MutflowIntegration.CompileResult(succeeded = false, output = "No gradlew found")
         assertTrue("should fall back to raw output", result.errorLines.contains("No gradlew found"))
     }
+
+    @Test
+    fun `compile result detects no tests discovered`() {
+        val result = MutflowIntegration.CompileResult(
+            succeeded = false,
+            output = "There are test sources present and no filters are applied, but the test task did not discover any tests to execute.",
+        )
+        assertTrue("should detect no-tests-discovered", result.noTestsDiscovered)
+    }
+
+    @Test
+    fun `fallback test template is valid and targets the class`() {
+        val template = MutflowIntegration.fallbackTestTemplate(
+            scenarioId = "project_ollama_test",
+            targetFqName = "generated.snapshot.GreeterImpl",
+            testPackage = "generated.snapshot",
+        )
+        assertTrue("should have package", template.contains("package generated.snapshot"))
+        assertTrue("should import MutFlowTest", template.contains("import io.github.anschnapp.mutflow.junit.MutFlowTest"))
+        assertTrue("should import MutFlow", template.contains("import io.github.anschnapp.mutflow.MutFlow"))
+        assertTrue("should construct the target", template.contains("generated.snapshot.GreeterImpl()"))
+        assertTrue("should be @MutFlowTest", template.contains("@MutFlowTest"))
+        assertTrue("should wrap in underTest", template.contains("MutFlow.underTest"))
+    }
 }

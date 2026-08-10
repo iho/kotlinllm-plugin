@@ -118,6 +118,27 @@ class SnapshotOrchestrator(
                     statusSink("Agent tests compile (attempt $compileAttempt).")
                     break
                 }
+                // If the agent produced empty/no tests, fall back to a deterministic
+                // template instead of retrying the LLM (which keeps producing nothing).
+                if (compile.noTestsDiscovered || snapshot.tests.isBlank()) {
+                    statusSink("Agent produced no usable tests (attempt $compileAttempt). Falling back to deterministic template.")
+                    val target = discoverFirstTargetFqName()
+                    snapshot.tests = MutflowIntegration.fallbackTestTemplate(
+                        scenarioId = snapshot.state.scenarioId,
+                        targetFqName = target,
+                        testPackage = testPackageFor(snapshot),
+                    )
+                    MutflowIntegration.emitTestFile(config, snapshot.state.scenarioId, snapshot.tests)
+                    // Re-check the fallback compiles.
+                    val recompile = MutflowIntegration.compileTest(config)
+                    if (recompile.succeeded) {
+                        compileOk = true
+                        statusSink("Deterministic fallback test compiles.")
+                        break
+                    }
+                    statusSink("Fallback test also failed to compile; giving up on compile gate.")
+                    break
+                }
                 if (compileAttempt >= maxCompileRetries) {
                     statusSink("Agent tests still fail to compile after $maxCompileRetries attempts; giving up on compile gate.")
                     break
@@ -301,6 +322,33 @@ class SnapshotOrchestrator(
             .joinToString("")
             .trim('.')
         return if (base.isBlank()) "generated.snapshot" else "generated.snapshot.$base"
+    }
+
+    /**
+     * Discover the first @MutationTarget class's fully-qualified name in the project,
+     * for the deterministic fallback test template. Returns null if none found.
+     */
+    private fun discoverFirstTargetFqName(): String? {
+        val base = project.basePath ?: return null
+        val root = java.nio.file.Path.of(base)
+        val sourceRoots = listOf(
+            root.resolve("src/main/kotlin"),
+            root.resolve("kotlin_generated_files"),
+        )
+        sourceRoots.forEach { srcRoot ->
+            if (!srcRoot.toFile().exists()) return@forEach
+            srcRoot.toFile().walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val text = runCatching { file.readText() }.getOrNull() ?: return@forEach
+                    if (text.contains("@MutationTarget")) {
+                        val pkg = Regex("package\\s+([\\w.]+)").find(text)?.groupValues?.get(1) ?: ""
+                        val cls = Regex("(?:class|interface|object)\\s+(\\w+)").find(text)?.groupValues?.get(1) ?: return@forEach
+                        return if (pkg.isBlank()) cls else "$pkg.$cls"
+                    }
+                }
+        }
+        return null
     }
 
     private fun renderCoverage(snapshot: ScenarioSnapshot, report: MutflowIntegration.MutflowReport): String = buildString {

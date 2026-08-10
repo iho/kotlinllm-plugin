@@ -50,5 +50,13 @@
                 description="Run the multi-agent snapshot convention (SpecAuthor, SpecReviewer, Snapshotter, TestGenerator, MutationAuditor) and drive mutflow coverage">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+
+        <action
+                id="KotlinLlm.RegenerateEverything"
+                class="com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.RegenerateEverythingAction"
+                text="Regenerate Everything"
+                description="Wipe all materialized snapshots and regenerate them from scratch (clean-slate rebuild)">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

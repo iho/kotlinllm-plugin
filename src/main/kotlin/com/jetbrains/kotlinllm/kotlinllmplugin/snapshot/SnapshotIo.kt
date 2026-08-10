@@ -70,6 +70,35 @@ object SnapshotIo {
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * Delete a scenario's materialized directory (all files: snapshot.json, spec,
+     * review, tests, coverage, prompt-spec, high-level-spec). Used by the
+     * "regenerate everything" reset path so a stale/broken scenario can be wiped
+     * and rebuilt from scratch.
+     *
+     * @return true if the directory existed and was deleted (or was already gone).
+     */
+    fun clearScenario(project: Project, scenarioId: String): Boolean {
+        val dir = scenarioDir(project, scenarioId) ?: return false
+        return runCatching {
+            if (dir.exists()) {
+                dir.toFile().deleteRecursively()
+            }
+            refreshVfs(project, dir.parent ?: dir)
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Delete ALL materialized scenarios under the snapshot root. Returns the
+     * number of scenario directories removed.
+     */
+    fun clearAllScenarios(project: Project): Int {
+        val ids = listScenarioIds(project)
+        ids.forEach { clearScenario(project, it) }
+        return ids.size
+    }
+
     private fun writeTextFile(dir: Path, fileName: String, content: String) {
         val file = dir.resolve(fileName)
         runCatching { file.writeText(content) }
