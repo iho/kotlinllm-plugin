@@ -49,6 +49,45 @@ class SnapshotAgentTools(
 
     @Suppress("unused")
     @Tool
+    @LLMDescription("Discover the project's @MutationTarget classes and their source. Use this to find the real code the tests must exercise (so mutflow discovers mutations instead of 0). Returns each target's package, class name, and full source.")
+    fun discoverMutationTargets(): String {
+        val base = project.basePath ?: return "<no project base path>"
+        val root = java.nio.file.Path.of(base)
+        val results = mutableListOf<String>()
+        // Scan the main source roots for files declaring @MutationTarget.
+        val sourceRoots = listOf(
+            root.resolve("src/main/kotlin"),
+            root.resolve("kotlin_generated_files"),
+        )
+        sourceRoots.forEach { srcRoot ->
+            if (!srcRoot.toFile().exists()) return@forEach
+            srcRoot.toFile().walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val text = runCatching { file.readText() }.getOrNull() ?: return@forEach
+                    if (text.contains("@MutationTarget") || text.contains("MutationTarget")) {
+                        val pkg = Regex("package\\s+([\\w.]+)").find(text)?.groupValues?.get(1) ?: "<default>"
+                        val cls = Regex("(?:class|interface|object)\\s+(\\w+)").find(text)?.groupValues?.get(1) ?: "<unknown>"
+                        results.add(
+                            buildString {
+                                appendLine("### $pkg.$cls")
+                                appendLine("File: ${file.path}")
+                                appendLine("Source:")
+                                appendLine(text)
+                            }
+                        )
+                    }
+                }
+        }
+        return if (results.isEmpty()) {
+            "<no @MutationTarget classes found in src/main/kotlin or kotlin_generated_files>"
+        } else {
+            results.joinToString("\n\n")
+        }
+    }
+
+    @Suppress("unused")
+    @Tool
     @LLMDescription("Read the buggy production source file. Use this to inspect the code that needs fixing.")
     fun readSource(): String {
         val path = sourceFilePath ?: return "<no source file configured>"

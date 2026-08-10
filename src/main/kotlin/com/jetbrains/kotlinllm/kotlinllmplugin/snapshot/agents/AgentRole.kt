@@ -78,6 +78,11 @@ enum class AgentRole(
         scenario's code inside MutFlow.underTest { } so mutations are active. Cover every
         invariant and edge case the spec/review call out; prefer tests that would kill a
         surviving mutant (assert exact boundary values, branch outcomes, and error paths).
+        CRITICAL: call discoverMutationTargets() FIRST to find the project's real
+        @MutationTarget classes, then write tests that exercise those classes' methods
+        (construct the class, call each method with boundary/edge inputs, assert exact
+        results). Do NOT write vacuous placeholder tests — the tests must actually invoke
+        the @MutationTarget code so mutflow discovers mutations.
         Use ONLY these exact imports and API — do NOT invent packages. Copy them verbatim:
         import io.github.anschnapp.mutflow.junit.MutFlowTest
         import io.github.anschnapp.mutflow.MutFlow
