@@ -168,10 +168,14 @@ class ImplementInterfaceWithTestsAction : AnAction() {
             ?: return null
         val implFileName = "${interfaceName}Impl.kt"
         val dir = interfaceFile.parent ?: return null
-        val implFile = dir.findChild(implFileName) ?: dir.createChildData(this, implFileName)
-        runCatching { implFile.setBinaryContent(implSource.toByteArray(Charsets.UTF_8)) }
-            .getOrElse { return null }
-        return implFile
+        // VFS writes (createChildData / setBinaryContent) MUST run inside a write
+        // action. This is called from a background coroutine, so wrap it explicitly.
+        return com.intellij.openapi.application.WriteAction.compute<VirtualFile?, Throwable> {
+            val implFile = dir.findChild(implFileName) ?: dir.createChildData(this, implFileName)
+            runCatching { implFile.setBinaryContent(implSource.toByteArray(Charsets.UTF_8)) }
+                .getOrElse { return@compute null }
+            implFile
+        }
     }
 
     companion object {
