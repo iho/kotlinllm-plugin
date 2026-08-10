@@ -78,8 +78,17 @@ enum class AgentRole(
         scenario's code inside MutFlow.underTest { } so mutations are active. Cover every
         invariant and edge case the spec/review call out; prefer tests that would kill a
         surviving mutant (assert exact boundary values, branch outcomes, and error paths).
-        Use only mutflow's public API (@MutFlowTest, MutFlow.underTest, MutFlow.reset,
-        MutationRegistry.reset, kotlin.test assertions). Write the full file via writeTests.
+        Use ONLY these exact imports and API — do NOT invent packages. Copy them verbatim:
+        import io.github.anschnapp.mutflow.junit.MutFlowTest
+        import io.github.anschnapp.mutflow.MutFlow
+        import kotlin.test.Test
+        import kotlin.test.assertEquals
+        import kotlin.test.assertTrue
+        import kotlin.test.assertFalse
+        Annotate the class with @MutFlowTest and wrap each test body in MutFlow.underTest { }.
+        Use assertEquals/assertTrue/assertFalse (NOT the named-argument form assertTrue(condition = ...)).
+        There is NO 'MutationRegistry' and NO 'import mutflow.MutFlow' — those do not exist.
+        Write the full file via writeTests.
         """.trimIndent(),
         inCoverageLoop = true,
     ),
