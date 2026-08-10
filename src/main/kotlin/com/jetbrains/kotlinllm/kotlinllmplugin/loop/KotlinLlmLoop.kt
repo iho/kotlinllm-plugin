@@ -25,6 +25,7 @@ import com.jetbrains.kotlinllm.kotlinllmplugin.services.elapsedMillis
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.kotlinLlmStatsService
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.resolveConfiguredBuildsFolderPath
 import com.jetbrains.kotlinllm.kotlinllmplugin.services.toProjectRelativeKotlinLlmPath
+import com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.snapshotCaptureService
 import com.sun.jdi.Method
 import com.sun.jdi.ReferenceType
 import com.sun.jdi.StringReference
@@ -228,6 +229,9 @@ class KotlinLlmLoop(
         val fromValues = extractArgumentValues(method, event.thread())
         project.kotlinLlmStatsService.recordMethodIntercepted(statsSessionId, trackedMethod, fromValues.size)
         logMethodInterception(method.name(), fromValues)
+        // Bridge: record this real invocation so the snapshot orchestration can seed its
+        // state from live observed calls (instead of an empty {}).
+        runCatching { project.snapshotCaptureService.recordInvocation(trackedMethod, fromValues) }
         val hotReloaded = processTrackedMethod(trackedMethod, fromValues)
         if (hotReloaded) {
             val restarted = restartInterruptedInvocation(event.thread())

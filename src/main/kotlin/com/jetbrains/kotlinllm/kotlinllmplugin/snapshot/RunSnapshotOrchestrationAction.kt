@@ -59,15 +59,31 @@ class RunSnapshotOrchestrationAction : AnAction() {
         }
 
         val scenarioId = buildScenarioId(project)
-        // Load the previously-materialized snapshot if one exists (preserves the agent's
-        // prior spec/review/tests so a re-run recreates removed test files instead of
-        // starting from blank). Otherwise seed a fresh empty snapshot.
-        val snapshot = SnapshotIo.read(project, scenarioId) ?: ScenarioSnapshot(
+        // Seed the snapshot from LIVE runtime invocations captured by the last KotlinLLM
+        // run (the breakpoint loop records every intercepted asLlm/mockLlm call). If none
+        // were captured yet, fall back to the previously-persisted snapshot, then to a
+        // fresh empty one.
+        val capture = project.snapshotCaptureService
+        val liveState = if (!capture.isEmpty()) capture.toSnapshotState(scenarioId) else null
+        val snapshot = liveState?.let { s ->
+            // Keep any prior agent artifacts (spec/review/tests) so a re-run preserves them;
+            // only the state is refreshed from the live capture.
+            (SnapshotIo.read(project, scenarioId) ?: ScenarioSnapshot(state = s)).copy(state = s)
+        } ?: SnapshotIo.read(project, scenarioId) ?: ScenarioSnapshot(
             state = SnapshotState(
                 scenarioId = scenarioId,
                 capturedAt = Instant.now().toString(),
             )
         )
+        if (liveState != null) {
+            statusSink(
+                "Captured ${capture.size()} live invocation(s) from the last KotlinLLM run; seeding snapshot state."
+            )
+        } else {
+            statusSink(
+                "No live invocations captured yet — run asLlm/mockLlm once first so the snapshot has real state."
+            )
+        }
         // Materialize the state file immediately so the convention is visible.
         SnapshotIo.write(project, snapshot)
 
