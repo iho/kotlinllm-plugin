@@ -79,7 +79,10 @@ object MutflowIntegration {
         val file = testDir.resolve(fileName)
         runCatching { file.writeText(testSource) }.getOrNull() ?: return null
 
-        LocalFileSystem.getInstance().refreshAndFindFileByNioFile(testDir)?.refresh(false, true)
+        // VFS refresh must run inside a write action (called from background coroutines).
+        com.intellij.openapi.application.WriteAction.run<Throwable> {
+            LocalFileSystem.getInstance().refreshAndFindFileByNioFile(testDir)?.refresh(false, true)
+        }
         return file
     }
 

@@ -110,12 +110,16 @@ object SnapshotIo {
     }
 
     private fun refreshVfs(project: Project, dir: Path) {
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(dir)
-        if (vf != null) {
-            vf.refresh(false, true)
-        } else {
-            val parent = dir.parent
-            if (parent != null) LocalFileSystem.getInstance().refreshAndFindFileByNioFile(parent)?.refresh(false, true)
+        // VFS refresh must run inside a write action. This is called from background
+        // coroutines (snapshot orchestration), so wrap it explicitly.
+        com.intellij.openapi.application.WriteAction.run<Throwable> {
+            val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(dir)
+            if (vf != null) {
+                vf.refresh(false, true)
+            } else {
+                val parent = dir.parent
+                if (parent != null) LocalFileSystem.getInstance().refreshAndFindFileByNioFile(parent)?.refresh(false, true)
+            }
         }
     }
 
