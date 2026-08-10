@@ -83,6 +83,9 @@ enum class AgentRole(
         (construct the class, call each method with boundary/edge inputs, assert exact
         results). Do NOT write vacuous placeholder tests — the tests must actually invoke
         the @MutationTarget code so mutflow discovers mutations.
+        IMPORTANT: never pass null to a non-nullable parameter. If a method signature is
+        `fun greet(name: String)` (non-null String), do NOT call greet(null) — that will
+        not compile. Only pass null to parameters declared nullable (e.g. `String?`).
         Use ONLY these exact imports and API — do NOT invent packages. Copy them verbatim:
         import io.github.anschnapp.mutflow.junit.MutFlowTest
         import io.github.anschnapp.mutflow.MutFlow
