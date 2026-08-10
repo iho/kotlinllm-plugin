@@ -58,5 +58,14 @@
                 description="Wipe all materialized snapshots and regenerate them from scratch (clean-slate rebuild)">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+
+        <action
+                id="KotlinLlm.ImplementInterfaceWithTests"
+                class="com.jetbrains.kotlinllm.kotlinllmplugin.snapshot.ImplementInterfaceWithTestsAction"
+                text="Implement Interface with Tests"
+                description="Ask the LLM to implement the selected interface as a @MutationTarget class, then generate useful mutflow tests and drive coverage">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
