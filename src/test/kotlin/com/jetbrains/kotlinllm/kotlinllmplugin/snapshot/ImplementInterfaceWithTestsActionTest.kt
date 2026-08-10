@@ -35,4 +35,14 @@ class ImplementInterfaceWithTestsActionTest {
         val name = ImplementInterfaceWithTestsAction.implFileNameForTest("Calculator.kt")
         assertEquals("CalculatorImpl.kt", name)
     }
+
+    @Test
+    fun `extracts interface name from file contents not filename`() {
+        // The filename "Greeter.kt" does NOT contain "interface X"; the name must
+        // come from the file contents. This is the regression that caused
+        // "Failed to write implementation file."
+        val contents = "package foo\n\ninterface Greeter {\n    fun greet(name: String): String\n}"
+        val name = ImplementInterfaceWithTestsAction.interfaceNameFromContentsForTest(contents)
+        assertEquals("Greeter", name)
+    }
 }

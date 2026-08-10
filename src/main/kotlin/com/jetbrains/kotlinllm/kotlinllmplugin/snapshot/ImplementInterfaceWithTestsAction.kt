@@ -160,9 +160,13 @@ class ImplementInterfaceWithTestsAction : AnAction() {
     private fun stripCodeFences(text: String): String = stripCodeFencesForTest(text)
 
     private fun writeImplementation(interfaceFile: VirtualFile, implSource: String): VirtualFile? {
-        val interfaceName = Regex("interface\\s+(\\w+)").find(interfaceFile.name)?.groupValues?.get(1)
+        // Extract the interface name from the FILE CONTENTS, not the filename
+        // (the filename is "Greeter.kt", which never matches "interface X").
+        val contents = runCatching { interfaceFile.contentsToByteArray().toString(Charsets.UTF_8) }
+            .getOrNull() ?: return null
+        val interfaceName = Regex("interface\\s+(\\w+)").find(contents)?.groupValues?.get(1)
             ?: return null
-        val implFileName = implFileNameForTest(interfaceFile.name)
+        val implFileName = "${interfaceName}Impl.kt"
         val dir = interfaceFile.parent ?: return null
         val implFile = dir.findChild(implFileName) ?: dir.createChildData(this, implFileName)
         runCatching { implFile.setBinaryContent(implSource.toByteArray(Charsets.UTF_8)) }
@@ -188,5 +192,9 @@ class ImplementInterfaceWithTestsAction : AnAction() {
                 ?: interfaceFileName.removeSuffix(".kt")
             return "${interfaceName}Impl.kt"
         }
+
+        /** Testable: extract the interface name from file contents. */
+        internal fun interfaceNameFromContentsForTest(contents: String): String? =
+            Regex("interface\\s+(\\w+)").find(contents)?.groupValues?.get(1)
     }
 }
